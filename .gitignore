@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Build and Release Folders
 bin/
 bin-debug/
@@ -9,3 +10,6 @@ bin-release/
 # Project files, i.e. `.project`, `.actionScriptProperties` and `.flexProperties`
 # should NOT be excluded as they contain compiler settings and other important
 # information for Eclipse / Flash Builder.
+=======
+*.pyc
+>>>>>>> 74800a8ab4b4b3638c4dcdef537143181a9bdc76
