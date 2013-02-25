@@ -1,4 +1,5 @@
 import csv, pandas, sys, time
+import cPickle as pickle
 
 '''
 Import the training data and parse it
@@ -26,3 +27,12 @@ def get_data(fname='data/Train.csv'):
 if __name__ == '__main__':
     data = get_data('data/Train.csv')
     print data 
+
+# Convenience function for loading pickle files
+def read_file(fin):
+    try:
+        contents = pickle.load(open(fin, 'rb'))
+        return contents
+    except IOError:
+        return None
+
