@@ -44,13 +44,20 @@ def get_all_counts(counts_file):
     return counts
 
 def add_feats(data, sorted_counts):
-    for text in data['FullDescription']:
+    most_freq_words = [word for word, val in sorted_counts[:500]]
+    all_freqs = {}
+    start = time.time()
+    for ii, text in enumerate(data['FullDescription']):
         desc_counts = count_words(text)
         total_words = float(len(nltk.tokenize.word_tokenize(text)))
-        desc_freq = {}
+        desc_freq = dict_maker()
         for word in desc_counts:
             desc_freq[word] = desc_counts[word] / total_words
-    pandas.Series([pair[0] for pair in sorted_counts[:500]], index=data.index)
+        all_freqs[ii] = desc_freq
+        if not ii % 1000:
+            print 'Counted frequencies in {0} ads in {1} s'.format(ii, time.time() - start)
+    for word, val in sorted_counts[:500]:
+        data[word] = pandas.Series([all_freqs[d][word] for d in all_freqs], index=data.index)
 
 if __name__ == '__main__':
     counts = get_all_counts('total_word_counts.p')
@@ -62,9 +69,11 @@ if __name__ == '__main__':
     data = datagetter.get_data()
     add_feats(data, sorted_counts)
 
+    pickle.dump(data, open('annotated_data.p', 'wb'))
+
     print data
 
-    plt.bar([ii for ii in range(100)], [val[1] for val in sorted_counts[:100]])
-    plt.show()
+#    plt.bar([ii for ii in range(100)], [val[1] for val in sorted_counts[:100]])
+#    plt.show()
 
 
