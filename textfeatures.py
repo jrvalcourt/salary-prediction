@@ -1,6 +1,5 @@
-import datagetter, nltk, time, sys, os.path, operator, pandas
+import datagetter, nltk, time, sys, os.path, operator, pandas, collections, math
 import cPickle as pickle
-from collections import defaultdict
 import matplotlib.pyplot as plt
 
 DATA_FILE = 'data/Train.csv'
@@ -72,21 +71,108 @@ def get_all_counts_and_lengths(counts_file, lengths_file):
         lengths = datagetter.read_file(lengths_file)
     return counts, lengths 
 
-def add_feats(data, sorted_counts):
-    most_freq_words = [word for word, val in sorted_counts[:500]]
-    all_freqs = {}
+#def count_word_occurences_in_row(row, words, start_time=None):
+#    if not int(row.name) % 1000: 
+#    print 'Finished {0} in {1} s'.format(row.name, time.time() - start_time)
+#    word_counts = []
+#    for word in words:
+#        count, length = 0, 0
+#        for sentence in nltk.sent_tokenize(row['FullDescription']):
+#            curr_words = nltk.word_tokenize(sentence)
+#            count += curr_words.count(word)
+#            length += len(sentence)
+#        word_counts.append(count / float(length))
+#    print word_counts[:10], len(word_counts), words[:10], len(words)
+#    return pandas.Series(word_counts, index=words)
+
+# yield chunks of the data in tokenized form
+#def chunk_generator(n, name, chunksize=50000):
+#    num_of_chunks = int(math.ceil(len(data) / float(chunksize)))
+#    for chunknum in range(num_of_chunks):
+#        chunkfile = 'temp/{0}-{1}-{2}.p'.format(name, chunknum, num_of_chunks)
+#        if not os.path.exists(chunkfile):
+#            print 'Tokenizing chunk {0} of {1}'.format(chunknum + 1, num_of_chunks)
+#            chunk = [[word for sentence in nltk.sent_tokenize(text) 
+#                    for word in nltk.word_tokenize(sentence)] 
+#                    for text in n[chunknum * chunksize:(chunknum + 1) * chunksize]]
+#            pickle.dump(chunk, open(chunkfile, 'wb'))
+#            yield chunknum, num_of_chunks, chunk
+#        else:
+#            print 'Reading precalculated chunk {0} of {1}'.format(chunknum + 1, num_of_chunks)
+#            yield chunknum, num_of_chunks, pickle.load(open(chunkfile, 'rb'))
+
+def how_many_chunks(n, chunksize=50000):
+    return int(math.ceil(n / float(chunksize)))
+
+def get_tokenized_chunk(n, name, chunknum, chunksize=50000):
+    num_of_chunks = how_many_chunks(len(data), chunksize)
+    chunkfile = 'temp/{0}-{1}-{2}.p'.format(name, chunknum, num_of_chunks)
+    if not os.path.exists(chunkfile):
+        print 'Tokenizing chunk {0} of {1}'.format(chunknum + 1, num_of_chunks)
+        chunk = [[word for sentence in nltk.sent_tokenize(text)
+                for word in nltk.word_tokenize(sentence)]
+                for text in n[chunknum * chunksize:(chunknum + 1) * chunksize]]
+        pickle.dump(chunk, open(chunkfile, 'wb'))
+        return chunk
+    else:
+        print 'Reading precalculated chunk {0} of {1}'.format(chunknum + 1, num_of_chunks)
+        return pickle.load(open(chunkfile, 'rb'))
+
+def collate(name):
+    print 'Collating answer "{0}"...'.format(name)
+    tempfiles = os.listdir('temp')
+    for filename in tempfiles:
+        if filename.startswith(name + '-'): 
+            break
+    num_of_chunks = int(filename.split('-')[-1])
+    answer = []
+    for ii in range(num_of_chunks):
+        print 'Adding answer chunk {0} of {1}'.format(ii + 1, num_of_chunks)
+        answer.extend(pickle.load(open('{0}-{1}-{2}.p'.format(name, ii, num_of_chunks),'rb')))
+    return answer
+
+def get_word_count_feats(data, words_to_count, answer_name):
+#    start = time.time()
+#    feats = data.apply(lambda x: count_word_occurences_in_row(x, words_to_count, start), axis=1)
+#    pickle.dump(feats, open(savefile, 'wb'))
+
+    final_name = 'temp/{0}_full.p'.format(answer_name)
+
+    if os.path.exists(final_name):
+        return pickle.load(open(final_name, 'rb'))
+
     start = time.time()
-    for ii, text in enumerate(data['FullDescription']):
-        desc_counts = count_words(text)
-        total_words = float(len(nltk.tokenize.word_tokenize(text)))
-        desc_freq = dict_maker()
-        for word in desc_counts:
-            desc_freq[word] = desc_counts[word] / total_words
-        all_freqs[ii] = desc_freq
-        if not ii % 1000:
-            print 'Counted frequencies in {0} ads in {1} s'.format(ii, time.time() - start)
-    for word, val in sorted_counts[:500]:
-        data[word] = pandas.Series([all_freqs[d][word] for d in all_freqs], index=data.index)
+    name = 'pretokenized'
+    total = how_many_chunks(len(data['FullDescription']), chunksize=50000)
+    for ii in range(total):
+        answer_file = 'temp/{0}-{1}-{2}.p'.format(answer_name, ii, total)
+        if not os.path.exists(answer_file):
+            print 'Started counting words in chunk {0} of {1} at {2} s'.format(ii + 1, total, time.time() - start)
+            chunk = get_tokenized_chunk(data['FullDescription'], name, ii, chunksize=50000)
+            answer = [[text.count(word) for word in words_to_count] 
+                    for text in chunk]
+            pickle.dump(answer, open(answer_file, 'wb'))
+        else:
+            print 'Chunk {0} of {1} is already computed at {2} s'.format(ii + 1, total, time.time() - start)
+    print 'Done at {0} s'.format(time.time() - start)
+    pickle.dump(answer, open(final_name, 'wb'))
+
+    return collate(answer_name)
+
+#    for curr_word in words_to_count:
+#        if os.path.exists('temp/word_counts/{0}.p'.format(curr_word)):
+#
+#        print 'Counting for {0}'.format(curr_word)
+#        per_desc_counts = []
+#        for ii, text in enumerate(data['FullDescription']):
+#            if not ii % 1000: print ii
+#            count = 0
+#            for sentence in nltk.sent_tokenize(text):
+#                count += nltk.word_tokenize(sentence).count(curr_word)
+#            per_desc_counts.append(count)
+#        data = data.append(per_desc_counts, ignore_index=True)
+#        print 'Finished counting the frequencies of {0} words in {1} s'.format(ii, time.time() - start)
+#    return data
 
 #################################################################################
 # Mean sentence length functions
@@ -131,7 +217,13 @@ if __name__ == '__main__':
     
     if not lengths:
          sys.stderr.write('Something went wrong reading the lengths file.')
-    print lengths
+#    print lengths
+
+    data = datagetter.get_data()
+    feats = get_word_count_feats(data, [word for word, val in sorted_counts[:500]], 'top500')
+
+    
+    print feats
     
     ''' 
     data = datagetter.get_data()
@@ -148,10 +240,3 @@ if __name__ == '__main__':
     plt.bar([ii for ii in range(100)], [val[1] for val in sorted_counts[:100]])
     plt.show()
     '''
-
-    
-
-
->>>>>>> 2a35a2814e6021c6027b2af1aab9bca489185797
-
-
